@@ -6,7 +6,7 @@ from delta.pip_utils import configure_spark_with_delta_pip
 from crawl_data import *
 
 conf = SparkConf()
-conf.set('spark.jars.packages', "io.delta:delta-core_2.12:2.3.0")
+conf.set('spark.jars.packages', "io.delta:delta-core_2.12:2.3.0,org.postgresql:postgresql:42.6.0")
 conf.set("spark.sql.warehouse.dir", "hdfs://namenode:9000/data")
 conf.set("spark.cores.max", 2)
 conf.set("spark.driver.memory", "4g")
@@ -14,7 +14,7 @@ conf.set("spark.executor.memory", "4g")
 conf.set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
 conf.set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
 spark = SparkSession.builder \
-    .master('local[*]') \
+    .master('spark://spark-master:7077') \
     .appName('DeltaLake') \
     .config(conf=conf)
     

@@ -1,0 +1,19 @@
+version: "3"
+
+services:
+  hive-server2:
+    image: apache/hive:4.0.0-beta-2-SNAPSHOT
+    container_name: hive-server2
+    hostname: hive-server2
+    ports:
+      - 10000:10000
+      - 10002:10002
+      - 9083:9083
+    environment:
+      - SERVICE_NAME=hiveserver2
+    healthcheck:
+      test: ["CMD", "beeline ", "-u", "jdbc:hive2://localhost:10000/" ]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    restart: unless-stopped

@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  scraper:
+  spark-container:
     image: spark-image
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: scraper
+    container_name: spark-container
     depends_on:
       - spark-master
     restart: unless-stopped

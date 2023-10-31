@@ -5,11 +5,11 @@ from delta import *
 from delta.pip_utils import configure_spark_with_delta_pip
 import itertools
 from pyspark.sql import functions as func
-from pyspark.sql import window
+from pyspark.sql import Window
 
 conf = SparkConf()
-conf.set('spark.jars.packages', "io.delta:delta-core_2.12:2.3.0")
-conf.set("spark.sql.warehouse.dir", "hdfs://namenode:9000/spark-warehouse")
+conf.set('spark.jars.packages', "io.delta:delta-core_2.12:2.3.0,mysql-connector-java-8.0.13.jar")
+conf.set("spark.sql.spark-warehouse.dir", "hdfs://namenode:9000/spark-warehouse")
 conf.set("spark.cores.max", 2)
 conf.set("spark.driver.memory", "4g")
 conf.set("spark.executor.memory", "4g")
@@ -24,7 +24,7 @@ spark = SparkSession.builder \
 spark = configure_spark_with_delta_pip(spark).getOrCreate()
 
 
-crash_df = spark.read.format('csv').option('path', 'hdfs://namenode:9000/data/crashes_data/').option('header', 'true').option('inferschema', 'true').load() \
+crash_df = spark.read.format('delta').option('path', 'hdfs://namenode:9000/data/crashes_table/').load() \
     .withColumn('timestamp', func.to_timestamp('crash_date', 'mm/dd/yyyy hh:mm:ss a')) \
     .withColumn('hour', func.hour(func.col('timestamp'))) \
     .withColumn('minute', func.minute(func.col('timestamp'))) \
@@ -33,20 +33,21 @@ crash_df = spark.read.format('csv').option('path', 'hdfs://namenode:9000/data/cr
     .withColumn('dayofweek', func.dayofweek(func.col('timestamp'))) \
     .withColumn('month', func.month(func.col('timestamp'))) \
     .withColumn('week', func.weekofyear(func.col('timestamp'))) \
-    .withColumn('year', func.year(func.col('timestamp')))
+    .withColumn('year', func.year(func.col('timestamp'))) \
+    .drop('location')
+
     
-people_df = spark.read.format('csv').option('path', 'hdfs://namenode:9000/data/people_data/').option('header', 'true').option('inferschema', 'true').load()
-vehicle_df = spark.read.format('csv').option('path', 'hdfs://namenode:9000/data/vehicles_data/').option('header', 'true').option('inferschema', 'true').load()
+people_df = spark.read.format('delta').option('path', 'hdfs://namenode:9000/data/people_table/').load()
+vehicle_df = spark.read.format('delta').option('path', 'hdfs://namenode:9000/data/vehicles_table/').load()
+
+dim_vehicle = vehicle_df.select('vehicle_id', 'num_passengers', 'make', 'model', 'lic_plate_state', 'vehicle_year', 'vehicle_defect', 'vehicle_type', 'vehicle_use', 'travel_direction', 'maneuver', 'towed_i', 'fire_i', 'occupant_cnt', 'towed_by', 'towed_to', 'first_contact_point', 'commercial_src', 'carrier_name', 'carrier_state', 'carrier_city', 'total_vehicle_length', 'axle_cnt', 'vehicle_config', 'cargo_body_type', 'load_type')
+dim_person = people_df.select('person_id', 'person_type', 'vehicle_id', 'seat_no', 'city', 'state', 'zipcode', 'sex', 'age', 'drivers_license_state', 'drivers_license_class', 'safety_equipment', 'airbag_deployed', 'ejection', 'injury_classification', 'hospital', 'driver_action', 'driver_vision', 'physical_condition', 'pedpedal_action', 'pedpedal_visibility', 'pedpedal_location', 'bac_result', 'bac_result_value')
 
 
-dim_vehicle = vehicle_df.select('vehicle_id', 'num_passengers', 'make', 'model', 'lic_plate_state', 'vehicle_year', 'vehicle_defect', 'vehicle_type', 'vehicle_use', 'travel_direction', 'maneuver', 'towed_i', 'fire_i', 'occupant_cnt', 'exceed_speed_limit_i', 'towed_by', 'towed_to', 'first_contact_point', 'commercial_src', 'carrier_name', 'carrier_state', 'carrier_city', 'trailer1_width', 'trailer2_width', 'trailer1_length', 'trailer2_length', 'total_vehicle_lendth', 'axle_cnt', 'vehicle_config', 'cargo_body_type', 'load_type')
-dim_person = people_df.select('person_id', 'person_type', 'vehicle_id', 'seat_no', 'city', 'state', 'zipcode', 'sex', 'age', 'drivers_license_state', 'drivers_license_class', 'safety_equipment', 'airbag_deployed', 'ejection', 'injury_classification', 'hospital', 'driver_action', 'driver_vision', 'physical_condition', 'pedpedal_action', 'pepdpedal_visibility', 'pedpedal_location', 'bac_result', 'bac_result value', 'cell_phone_use')
-
-
-dim_location = crash_df.select('street_no', 'street_direction', 'street_name', 'alignment', 'lane_cnt', 'posted_speed_limit', 'trafficway_type', 'longitude', 'latitude') \
+dim_location = crash_df.select('street_no', 'street_direction', 'street_name', 'alignment', 'posted_speed_limit', 'trafficway_type', 'longitude', 'latitude') \
     .dropDuplicates() \
     .withColumn('location_id', func.expr('uuid()')) \
-    .select('location_id', 'street_no', 'street_direction', 'street_name', 'alignment', 'lane_cnt', 'posted_speed_limit', 'trafficway_type', 'longitude', 'latitude')
+    .select('location_id', 'street_no', 'street_direction', 'street_name', 'alignment', 'posted_speed_limit', 'trafficway_type', 'longitude', 'latitude')
 
 time = [[x for x in range(24)], [x for x in range(60)], [x for x in range(60)]]
 combination = itertools.product(*time)
@@ -67,7 +68,7 @@ dim_weather = crash_df.select('weather_condition', 'lighting_condition') \
     .select('weather_id', 'weather_condition', 'lighting_condition')
     
 
-dim_junk = crash_df.select('intersection_related_i', 'not_right_of_way_i', 'hit_and_run_i', 'photos_taken_i', 'statements_taken_i', 'dooring_i', 'work_zone_i', 'workers_present_i') \
+dim_junk = crash_df.select('intersection_related_i', 'hit_and_run_i', 'photos_taken_i', 'statements_taken_i', 'dooring_i', 'work_zone_i', 'workers_present_i') \
     .na.fill('empty') \
     .dropDuplicates() \
     .withColumn('junk_id', func.expr('uuid()')) \
@@ -119,12 +120,11 @@ bridge_peron_group = people_df.select('crash_record_id', 'person_id') \
     .withColumnRenamed('crash_record_id', 'person_group_key')
 
 
-windowspec = window.partitionby(func.col('location_id')).orderby(func.col('timestamp'))
+windowspec = Window.partitionBy(func.col('location_id')).orderBy(func.col('timestamp'))
 road_cond_mini_dim = crash_df.join(dim_location, (crash_df['street_no'] == dim_location['street_no'])
                         & (crash_df['street_direction'] == dim_location['street_direction'])
                         & (crash_df['street_name'] == dim_location['street_name'])
                         & (crash_df['alignment'] == dim_location['alignment'])
-                        & (crash_df['lane_cnt'] == dim_location['lane_cnt'])
                         & (crash_df['posted_speed_limit'] == dim_location['posted_speed_limit'])
                         & (crash_df['trafficway_type'] == dim_location['trafficway_type'])
                         & (crash_df['longitude'] == dim_location['longitude'])
@@ -142,7 +142,6 @@ control_device_cond_mini_dim = crash_df.join(dim_location, (crash_df['street_no'
                         & (crash_df['street_direction'] == dim_location['street_direction'])
                         & (crash_df['street_name'] == dim_location['street_name'])
                         & (crash_df['alignment'] == dim_location['alignment'])
-                        & (crash_df['lane_cnt'] == dim_location['lane_cnt'])
                         & (crash_df['posted_speed_limit'] == dim_location['posted_speed_limit'])
                         & (crash_df['trafficway_type'] == dim_location['trafficway_type'])
                         & (crash_df['longitude'] == dim_location['longitude'])
@@ -159,7 +158,6 @@ fact_crash = crash_df.join(dim_location, (crash_df['street_no'] == dim_location[
                         & (crash_df['street_direction'] == dim_location['street_direction'])
                         & (crash_df['street_name'] == dim_location['street_name'])
                         & (crash_df['alignment'] == dim_location['alignment'])
-                        & (crash_df['lane_cnt'] == dim_location['lane_cnt'])
                         & (crash_df['posted_speed_limit'] == dim_location['posted_speed_limit'])
                         & (crash_df['trafficway_type'] == dim_location['trafficway_type'])
                         & (crash_df['longitude'] == dim_location['longitude'])
@@ -176,7 +174,6 @@ fact_crash = crash_df.join(dim_location, (crash_df['street_no'] == dim_location[
                     .join(dim_report_type, (crash_df['report_type'] == dim_report_type['report_type']), 'inner') \
                     .join(dim_weather, (crash_df['weather_condition'] == dim_weather['weather_condition']) & (crash_df['lighting_condition'] == dim_weather['lighting_condition']), 'inner') \
                     .join(dim_junk, (crash_df['intersection_related_i'] == dim_junk['intersection_related_i'])
-                                    & (crash_df['not_right_of_way_i'] == dim_junk['not_right_of_way_i'])
                                     & (crash_df['hit_and_run_i'] == dim_junk['hit_and_run_i'])
                                     & (crash_df['photos_taken_i'] == dim_junk['photos_taken_i'])
                                     & (crash_df['statements_taken_i'] == dim_junk['statements_taken_i'])
@@ -191,29 +188,36 @@ fact_crash = crash_df.join(dim_location, (crash_df['street_no'] == dim_location[
                     .select('location_id', 'time_id', 'date_id', 'person_group_key', 'vehicle_group_key', 'weather_id', 'junk_id', 'cause_id', 'collision_type_id', 'report_type_id', 'crash_type_id', 'damage', 'num_units', 'injuries_total', 'injuries_fatal', 'injuries_incapacitating', 'injuries_non_incapacitating', 'injuries_reported_not_evident', 'injuries_no_indication', 'injuries_unknown')
    
 
-dim_time.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_time')
-dim_date.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_date')
 
-bridge_vehicle_group.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/bridge_vehicle_group')
-dim_vehicle.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_vehicle')
+# dim_time.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_time').save()
 
-dim_collision.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_collision')
-dim_report_type.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_report_type')
 
-dim_location.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_location')
-dim_road_cond.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_road_cond')
-dim_control_device_cond.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_control_device_cond')
-road_cond_mini_dim.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/road_cond_mini_dim')
-control_device_cond_mini_dim.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/control_device_cond_mini_dim')
+# dim_date.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_date').save()
 
-dim_weather.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_weather')
-dim_junk.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_junk')
-dim_cause.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_cause')
-dim_crash_type.write.format('')
 
-bridge_peron_group.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/bridge_person_group')
-dim_person.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_person')
+# bridge_vehicle_group.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/bridge_vehicle_group').save()
 
-fact_crash.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/fact_crash').save()
+
+# dim_vehicle.write.format('delta').mode('overwrite').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_vehicle').save()
+
+# dim_collision.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_collision').save()
+
+# dim_report_type.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_report_type').save()
+
+# dim_location.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_location').save()
+# dim_road_cond.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_road_cond').save()
+# dim_control_device_cond.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_control_device_cond').save()
+# road_cond_mini_dim.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/road_cond_mini_dim').save()
+# control_device_cond_mini_dim.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/control_device_cond_mini_dim').save()
+
+# dim_weather.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_weather').save()
+# dim_junk.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_junk').save()
+# dim_cause.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_cause').save()
+# dim_crash_type.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_crash_type').save()
+
+# bridge_peron_group.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/bridge_person_group').save()
+# dim_person.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/dim_person').save()
+
+# fact_crash.write.format('delta').mode('append').option('path', 'hdfs://namenode:9000/spark-warehouse/fact_crash').save()
 
 spark.stop()
