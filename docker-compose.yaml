@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  scraper:
+    image: spark-image
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scraper
+    depends_on:
+      - spark-master
+    restart: unless-stopped
+    volumes:
+      - ./:/src/
