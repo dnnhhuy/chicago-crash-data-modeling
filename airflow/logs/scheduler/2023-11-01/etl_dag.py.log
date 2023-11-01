@@ -1,7 +1,0 @@
-[2023-11-01T19:14:15.767+0700] {processor.py:157} INFO - Started process (PID=10483) to work on /opt/airflow/dags/etl_dag.py
-[2023-11-01T19:14:15.769+0700] {processor.py:829} INFO - Processing file /opt/airflow/dags/etl_dag.py for tasks to queue
-[2023-11-01T19:14:15.774+0700] {logging_mixin.py:151} INFO - [2023-11-01T19:14:15.774+0700] {dagbag.py:536} INFO - Filling up the DagBag from /opt/airflow/dags/etl_dag.py
-[2023-11-01T19:14:15.876+0700] {processor.py:839} INFO - DAG(s) dict_keys(['etl_pipeline']) retrieved from /opt/airflow/dags/etl_dag.py
-[2023-11-01T19:14:15.906+0700] {logging_mixin.py:151} INFO - [2023-11-01T19:14:15.906+0700] {dag.py:2941} INFO - Sync 1 DAGs
-[2023-11-01T19:14:15.922+0700] {logging_mixin.py:151} INFO - [2023-11-01T19:14:15.922+0700] {dag.py:3722} INFO - Setting next_dagrun for etl_pipeline to 2023-10-31T17:00:00+00:00, run_after=2023-11-07T17:00:00+00:00
-[2023-11-01T19:14:15.936+0700] {processor.py:179} INFO - Processing /opt/airflow/dags/etl_dag.py took 0.173 seconds
