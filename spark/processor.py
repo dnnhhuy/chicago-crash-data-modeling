@@ -6,7 +6,8 @@ from delta.pip_utils import configure_spark_with_delta_pip
 import itertools
 from pyspark.sql import functions as func
 from pyspark.sql import Window
-from crawl_data import *
+from spark.crawl_data import get_crash_data, get_people_data, get_vehicle_data
+from datetime import date, timedelta
 class DataProcessor:
     def __init__(self) -> None:
         conf = SparkConf()
@@ -65,11 +66,23 @@ class DataProcessor:
                 .execute()
         except:
             vehicles_df.withColumn('date', func.to_date(func.col('crash_date'))).write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/vehicles_table').partitionBy('date').save()
-        
-        return
-            
-    def extract_crash_table(self):
-        crash_df = self.spark.read.format('delta').option('path', 'hdfs://namenode:9000/data/crashes_table/').load() \
+    
+    def path_exists(self, path):
+        # spark is a SparkSession
+        sc = self.spark.sparkContext
+        fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(
+                sc._jvm.java.net.URI.create(path),
+                sc._jsc.hadoopConfiguration(),
+        )
+        return fs.exists(sc._jvm.org.apache.hadoop.fs.Path(path))
+    
+    def extract_crash_table(self, days_ago=0):
+        paths = []
+        for day in range(days_ago + 1):
+            path = f'hdfs://namenode:9000/data/crashes_table/date={(date.today() - timedelta(days=day))}'
+            if self.path_exists(path):
+                paths.append(path)
+        crash_df = self.spark.read.parquet(*paths) \
             .withColumn('timestamp', func.to_timestamp('crash_date', 'mm/dd/yyyy hh:mm:ss a')) \
             .withColumn('hour', func.hour(func.col('timestamp'))) \
             .withColumn('minute', func.minute(func.col('timestamp'))) \
@@ -82,17 +95,29 @@ class DataProcessor:
             .drop('location')
         return crash_df
 
-    def extract_people_table(self):
-        people_df = self.spark.read.format('delta').option('path', 'hdfs://namenode:9000/data/people_table/').load()
+    def extract_people_table(self, days_ago=0):
+        paths = []
+        for day in range(days_ago + 1):
+            path = f'hdfs://namenode:9000/data/people_table/date={(date.today() - timedelta(days=day))}'
+            if self.path_exists(path):
+                paths.append(path)
+        people_df = self.spark.read.parquet(*paths)
         return people_df
-    def extract_vehicle_table(self):
-        vehicle_df = self.spark.read.format('delta').option('path', 'hdfs://namenode:9000/data/vehicles_table/').load()
+    
+    def extract_vehicle_table(self, days_ago=0):
+        paths = []
+        for day in range(days_ago + 1):
+            path = f'hdfs://namenode:9000/data/vehicles_table/date={(date.today() - timedelta(days=day))}'
+            if self.path_exists(path):
+                paths.append(path)
+        vehicle_df = self.spark.read.parquet(*paths)
         return vehicle_df
 
     def transform(self, crash_df, people_df, vehicle_df):
-        dim_vehicle = vehicle_df.select('vehicle_id', 'num_passengers', 'make', 'model', 'lic_plate_state', 'vehicle_year', 'vehicle_defect', 'vehicle_type', 'vehicle_use', 'travel_direction', 'maneuver', 'towed_i', 'fire_i', 'occupant_cnt', 'towed_by', 'towed_to', 'first_contact_point', 'commercial_src', 'carrier_name', 'carrier_state', 'carrier_city', 'total_vehicle_length', 'axle_cnt', 'vehicle_config', 'cargo_body_type', 'load_type')
-        dim_person = people_df.select('person_id', 'person_type', 'vehicle_id', 'seat_no', 'city', 'state', 'zipcode', 'sex', 'age', 'drivers_license_state', 'drivers_license_class', 'safety_equipment', 'airbag_deployed', 'ejection', 'injury_classification', 'hospital', 'driver_action', 'driver_vision', 'physical_condition', 'pedpedal_action', 'pedpedal_visibility', 'pedpedal_location', 'bac_result', 'bac_result_value')
 
+        dim_vehicle = vehicle_df.select('vehicle_id', 'num_passengers', 'make', 'model', 'lic_plate_state', 'vehicle_year', 'vehicle_defect', 'vehicle_type', 'vehicle_use', 'travel_direction', 'maneuver', 'towed_i', 'fire_i', 'occupant_cnt', 'towed_by', 'towed_to', 'first_contact_point', 'commercial_src', 'carrier_name', 'carrier_state', 'carrier_city', 'total_vehicle_length', 'axle_cnt', 'vehicle_config', 'cargo_body_type', 'load_type')
+        
+        dim_person = people_df.select('person_id', 'person_type', 'vehicle_id', 'seat_no', 'city', 'state', 'zipcode', 'sex', 'age', 'drivers_license_state', 'drivers_license_class', 'safety_equipment', 'airbag_deployed', 'ejection', 'injury_classification', 'hospital', 'driver_action', 'driver_vision', 'physical_condition', 'pedpedal_action', 'pedpedal_visibility', 'pedpedal_location', 'bac_result')
 
         dim_location = crash_df.select('street_no', 'street_direction', 'street_name', 'alignment', 'posted_speed_limit', 'trafficway_type', 'longitude', 'latitude') \
             .dropDuplicates() \
@@ -257,5 +282,8 @@ class DataProcessor:
                 'fact_crash': fact_crash}
     
 
-    def load_star_schema(self, df, table_name):
-        df.write.format('delta').mode('append').option('path', f'hdfs://namenode:9000/spark-warehouse/{table_name}').save()
+    # Merge to old table
+    def load_star_schema(self, table_dict):
+        for table_name, table in table_dict.items():
+            table.write.mode('overwrite').format('parquet').option('path', f'hdfs://namenode:9000/spark-warehouse/{table_name}').save()
+        
