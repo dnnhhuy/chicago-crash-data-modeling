@@ -11,7 +11,7 @@ from datetime import date, timedelta
 class DataProcessor:
     def __init__(self) -> None:
         conf = SparkConf()
-        conf.set('spark.jars.packages', "io.delta:delta-core_2.12:2.3.0,mysql-connector-java-8.0.13.jar")
+        conf.set('spark.jars.packages', "io.delta:delta-iceberg_2.12:2.3.0.0")
         conf.set("spark.sql.spark-warehouse.dir", "hdfs://namenode:9000/spark-warehouse")
         conf.set("spark.cores.max", 2)
         conf.set("spark.driver.memory", "4g")
@@ -30,7 +30,7 @@ class DataProcessor:
         self.spark.stop()
 
     def api_to_delta(self):
-        crashes_data = get_crash_data(7)
+        crashes_data = get_crash_data(days_ago=7)
         crashes_df = self.spark.createDataFrame(data=crashes_data).na.fill('empty')
         
         try:
@@ -43,7 +43,7 @@ class DataProcessor:
         except:
             crashes_df.withColumn('date', func.to_date(func.col('crash_date'))).write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/crashes_table').partitionBy('date').save()
             
-        people_data = get_people_data(7)
+        people_data = get_people_data(days_ago=7)
         people_df = self.spark.createDataFrame(data=people_data).na.fill('empty')
         try:
             old_people_table = DeltaTable.forPath(self.spark, path='hdfs://namenode:9000/data/people_table')
@@ -55,7 +55,7 @@ class DataProcessor:
         except:
             people_df.withColumn('date', func.to_date(func.col('crash_date'))).write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/people_table').partitionBy('date').save()
             
-        vehicles_data = get_vehicle_data(7)
+        vehicles_data = get_vehicle_data(days_ago=7)
         vehicles_df = self.spark.createDataFrame(data=vehicles_data).na.fill('empty')
         try:
             old_vehicles_table = DeltaTable.forPath(self.spark, path='hdfs://namenode:9000/data/vehicles_table')
@@ -92,6 +92,7 @@ class DataProcessor:
             .withColumn('month', func.month(func.col('timestamp'))) \
             .withColumn('week', func.weekofyear(func.col('timestamp'))) \
             .withColumn('year', func.year(func.col('timestamp'))) \
+            .withColumn('quarter', func.quarter(func.col('timestamp'))) \
             .drop('location')
         return crash_df
 
@@ -117,7 +118,7 @@ class DataProcessor:
 
         dim_vehicle = vehicle_df.select('vehicle_id', 'num_passengers', 'make', 'model', 'lic_plate_state', 'vehicle_year', 'vehicle_defect', 'vehicle_type', 'vehicle_use', 'travel_direction', 'maneuver', 'towed_i', 'fire_i', 'occupant_cnt', 'towed_by', 'towed_to', 'first_contact_point', 'commercial_src', 'carrier_name', 'carrier_state', 'carrier_city', 'total_vehicle_length', 'axle_cnt', 'vehicle_config', 'cargo_body_type', 'load_type')
         
-        dim_person = people_df.select('person_id', 'person_type', 'vehicle_id', 'seat_no', 'city', 'state', 'zipcode', 'sex', 'age', 'drivers_license_state', 'drivers_license_class', 'safety_equipment', 'airbag_deployed', 'ejection', 'injury_classification', 'hospital', 'driver_action', 'driver_vision', 'physical_condition', 'pedpedal_action', 'pedpedal_visibility', 'pedpedal_location', 'bac_result')
+        dim_person = people_df.select('person_id', 'person_type', 'seat_no', 'city', 'state', 'zipcode', 'sex', 'age', 'drivers_license_state', 'drivers_license_class', 'safety_equipment', 'airbag_deployed', 'ejection', 'injury_classification', 'hospital', 'driver_action', 'driver_vision', 'physical_condition', 'pedpedal_action', 'pedpedal_visibility', 'pedpedal_location', 'bac_result')
 
         dim_location = crash_df.select('street_no', 'street_direction', 'street_name', 'alignment', 'posted_speed_limit', 'trafficway_type', 'longitude', 'latitude') \
             .dropDuplicates() \
@@ -131,10 +132,10 @@ class DataProcessor:
             .withColumn('time_id', func.expr('uuid()')) \
             .select('time_id', 'hour', 'minute', 'second')
 
-        dim_date = crash_df.select('day', 'dayofweek', 'month', 'week', 'year') \
+        dim_date = crash_df.select('day', 'dayofweek', 'month', 'week', 'year', 'quarter') \
             .dropDuplicates() \
             .withColumn('date_id', func.expr('uuid()')) \
-            .select('date_id', 'day', 'dayofweek', 'month', 'week', 'year')
+            .select('date_id', 'day', 'dayofweek', 'month', 'week', 'year', 'quarter')
 
 
         dim_weather = crash_df.select('weather_condition', 'lighting_condition') \

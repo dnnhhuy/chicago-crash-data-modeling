@@ -1,0 +1,26 @@
+[2023-11-01T11:56:34.957+0700] {processor.py:157} INFO - Started process (PID=31) to work on /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:56:34.964+0700] {processor.py:829} INFO - Processing file /opt/airflow/dags/incremental_load_dag.py for tasks to queue
+[2023-11-01T11:56:34.971+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:56:34.970+0700] {dagbag.py:539} INFO - Filling up the DagBag from /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:56:35.004+0700] {processor.py:839} INFO - DAG(s) dict_keys(['batch_etl_incremental_load']) retrieved from /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:56:35.295+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:56:35.295+0700] {manager.py:499} INFO - Created Permission View: %s
+[2023-11-01T11:56:35.304+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:56:35.303+0700] {manager.py:499} INFO - Created Permission View: %s
+[2023-11-01T11:56:35.311+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:56:35.311+0700] {manager.py:499} INFO - Created Permission View: %s
+[2023-11-01T11:56:35.311+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:56:35.311+0700] {security.py:708} INFO - Not syncing DAG-level permissions for DAG 'DAG:batch_etl_incremental_load' as access control is unset.
+[2023-11-01T11:56:35.312+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:56:35.312+0700] {dag.py:2915} INFO - Sync 1 DAGs
+[2023-11-01T11:56:35.324+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:56:35.324+0700] {dag.py:2937} INFO - Creating ORM DAG for batch_etl_incremental_load
+[2023-11-01T11:56:35.338+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:56:35.337+0700] {dag.py:3696} INFO - Setting next_dagrun for batch_etl_incremental_load to 2023-10-30T17:00:00+00:00, run_after=2023-10-31T17:00:00+00:00
+[2023-11-01T11:56:35.370+0700] {processor.py:179} INFO - Processing /opt/airflow/dags/incremental_load_dag.py took 0.419 seconds
+[2023-11-01T11:57:05.912+0700] {processor.py:157} INFO - Started process (PID=87) to work on /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:57:05.914+0700] {processor.py:829} INFO - Processing file /opt/airflow/dags/incremental_load_dag.py for tasks to queue
+[2023-11-01T11:57:05.916+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:57:05.916+0700] {dagbag.py:539} INFO - Filling up the DagBag from /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:57:05.941+0700] {processor.py:839} INFO - DAG(s) dict_keys(['batch_etl_incremental_load']) retrieved from /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:57:05.977+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:57:05.977+0700] {dag.py:2915} INFO - Sync 1 DAGs
+[2023-11-01T11:57:06.001+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:57:06.001+0700] {dag.py:3696} INFO - Setting next_dagrun for batch_etl_incremental_load to 2023-10-30T17:00:00+00:00, run_after=2023-10-31T17:00:00+00:00
+[2023-11-01T11:57:06.017+0700] {processor.py:179} INFO - Processing /opt/airflow/dags/incremental_load_dag.py took 0.111 seconds
+[2023-11-01T11:57:36.144+0700] {processor.py:157} INFO - Started process (PID=143) to work on /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:57:36.146+0700] {processor.py:829} INFO - Processing file /opt/airflow/dags/incremental_load_dag.py for tasks to queue
+[2023-11-01T11:57:36.147+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:57:36.147+0700] {dagbag.py:539} INFO - Filling up the DagBag from /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:57:36.166+0700] {processor.py:839} INFO - DAG(s) dict_keys(['batch_etl_incremental_load']) retrieved from /opt/airflow/dags/incremental_load_dag.py
+[2023-11-01T11:57:36.194+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:57:36.194+0700] {dag.py:2915} INFO - Sync 1 DAGs
+[2023-11-01T11:57:36.214+0700] {logging_mixin.py:151} INFO - [2023-11-01T11:57:36.214+0700] {dag.py:3696} INFO - Setting next_dagrun for batch_etl_incremental_load to 2023-10-30T17:00:00+00:00, run_after=2023-10-31T17:00:00+00:00
+[2023-11-01T11:57:36.231+0700] {processor.py:179} INFO - Processing /opt/airflow/dags/incremental_load_dag.py took 0.093 seconds
