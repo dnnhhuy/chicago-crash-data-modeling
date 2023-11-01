@@ -83,16 +83,15 @@ class DataProcessor:
             if self.path_exists(path):
                 paths.append(path)
         crash_df = self.spark.read.parquet(*paths) \
-            .withColumn('timestamp', func.to_timestamp('crash_date', 'mm/dd/yyyy hh:mm:ss a')) \
-            .withColumn('hour', func.hour(func.col('timestamp'))) \
-            .withColumn('minute', func.minute(func.col('timestamp'))) \
-            .withColumn('second', func.second(func.col('timestamp'))) \
-            .withColumn('day', func.dayofmonth(func.col('timestamp'))) \
-            .withColumn('dayofweek', func.dayofweek(func.col('timestamp'))) \
-            .withColumn('month', func.month(func.col('timestamp'))) \
-            .withColumn('week', func.weekofyear(func.col('timestamp'))) \
-            .withColumn('year', func.year(func.col('timestamp'))) \
-            .withColumn('quarter', func.quarter(func.col('timestamp'))) \
+            .withColumn('hour', func.hour(func.col('crash_date'))) \
+            .withColumn('minute', func.minute(func.col('crash_date'))) \
+            .withColumn('second', func.second(func.col('crash_date'))) \
+            .withColumn('day', func.dayofmonth(func.col('crash_date'))) \
+            .withColumn('dayofweek', func.dayofweek(func.col('crash_date'))) \
+            .withColumn('month', func.month(func.col('crash_date'))) \
+            .withColumn('week', func.weekofyear(func.col('crash_date'))) \
+            .withColumn('year', func.year(func.col('crash_date'))) \
+            .withColumn('quarter', func.quarter(func.col('crash_date'))) \
             .drop('location')
         return crash_df
 
@@ -148,9 +147,8 @@ class DataProcessor:
         dim_junk = crash_df.select('intersection_related_i', 'hit_and_run_i', 'photos_taken_i', 'statements_taken_i', 'dooring_i', 'work_zone_i', 'workers_present_i') \
             .na.fill('empty') \
             .dropDuplicates() \
-            .withColumn('junk_id', func.expr('uuid()')) \
-
-
+            .withColumn('junk_id', func.expr('uuid()'))
+            
         dim_cause = crash_df.select('prim_contributory_cause', 'sec_contributory_cause') \
             .na.fill('empty') \
             .dropDuplicates() \
@@ -193,11 +191,11 @@ class DataProcessor:
         bridge_vehicle_group = vehicle_df.select('crash_record_id', 'vehicle_id') \
             .withColumnRenamed('crash_record_id', 'vehicle_group_key')
 
-        bridge_peron_group = people_df.select('crash_record_id', 'person_id') \
+        bridge_person_group = people_df.select('crash_record_id', 'person_id') \
             .withColumnRenamed('crash_record_id', 'person_group_key')
 
 
-        windowspec = Window.partitionBy(func.col('location_id')).orderBy(func.col('timestamp'))
+        windowspec = Window.partitionBy(func.col('location_id')).orderBy(func.col('crash_date'))
         road_cond_mini_dim = crash_df.join(dim_location, (crash_df['street_no'] == dim_location['street_no'])
                                 & (crash_df['street_direction'] == dim_location['street_direction'])
                                 & (crash_df['street_name'] == dim_location['street_name'])
@@ -209,12 +207,13 @@ class DataProcessor:
                             .join(dim_road_cond, (crash_df['roadway_surface_cond'] == dim_road_cond['roadway_surface_cond'])
                                                 & (crash_df['road_defect'] == dim_road_cond['road_defect']), 'inner') \
                             .dropDuplicates() \
-                            .select('timestamp', 'location_id', 'road_cond_key') \
-                            .withColumn('start_date', func.col('timestamp')) \
-                            .withColumn('end_date', func.date_sub(func.lead(func.col('timestamp'), 1).over(windowspec), 1)) \
-                            .sort(func.col('location_id'), func.col('timestamp')) 
-                            
-
+                            .select('crash_date', 'location_id', 'road_cond_key') \
+                            .withColumn('start_date', func.to_date(func.col('crash_date')).cast(StringType())) \
+                            .withColumn('end_date', func.to_date(func.lead(func.col('crash_date'), 1).over(windowspec)).cast(StringType())) \
+                            .sort(func.col('location_id'), func.col('crash_date')) \
+                            .select('location_id', 'road_cond_key', 'start_date', 'end_date') \
+                            .na.fill("")
+        
         control_device_cond_mini_dim = crash_df.join(dim_location, (crash_df['street_no'] == dim_location['street_no'])
                                 & (crash_df['street_direction'] == dim_location['street_direction'])
                                 & (crash_df['street_name'] == dim_location['street_name'])
@@ -226,11 +225,13 @@ class DataProcessor:
                             .join(dim_control_device_cond, (crash_df['traffic_control_device'] == dim_control_device_cond['traffic_control_device'])
                                                 & (crash_df['device_condition'] == dim_control_device_cond['device_condition']), 'inner') \
                             .dropDuplicates() \
-                            .select('timestamp', 'location_id', 'device_cond_key') \
-                            .withColumn('start_date', func.col('timestamp')) \
-                            .withColumn('end_date', func.date_sub(func.lead(func.col('timestamp'), 1).over(windowspec), 1)) \
-                            .sort(func.col('location_id'), func.col('timestamp'))
-
+                            .select('crash_date', 'location_id', 'device_cond_key') \
+                            .withColumn('start_date', func.to_date(func.col('crash_date')).cast(StringType())) \
+                            .withColumn('end_date', func.to_date(func.lead(func.col('crash_date'), 1).over(windowspec)).cast(StringType())) \
+                            .sort(func.col('location_id'), func.col('crash_date')) \
+                            .select('location_id', 'device_cond_key', 'start_date', 'end_date') \
+                            .na.fill("")
+        
         fact_crash = crash_df.join(dim_location, (crash_df['street_no'] == dim_location['street_no'])
                                 & (crash_df['street_direction'] == dim_location['street_direction'])
                                 & (crash_df['street_name'] == dim_location['street_name'])
@@ -263,6 +264,7 @@ class DataProcessor:
                             .withColumn('person_group_key', func.col('crash_record_id')) \
                             .withColumn('vehicle_group_key', func.col('crash_record_id')) \
                             .select('location_id', 'time_id', 'date_id', 'person_group_key', 'vehicle_group_key', 'weather_id', 'junk_id', 'cause_id', 'collision_type_id', 'report_type_id', 'crash_type_id', 'damage', 'num_units', 'injuries_total', 'injuries_fatal', 'injuries_incapacitating', 'injuries_non_incapacitating', 'injuries_reported_not_evident', 'injuries_no_indication', 'injuries_unknown')
+        fact_crash.show()
         return {'dim_location': dim_location,
                 'road_cond_mini_dim': road_cond_mini_dim,
                 'control_device_cond_mini_dim': control_device_cond_mini_dim,
@@ -274,7 +276,7 @@ class DataProcessor:
                 'dim_vehicle': dim_vehicle,
                 'dim_collision': dim_collision,
                 'dim_report_type': dim_report_type,
-                'bridge_peron_group': bridge_peron_group,
+                'bridge_person_group': bridge_person_group,
                 'dim_person': dim_person,
                 'dim_weather': dim_weather,
                 'dim_junk': dim_junk,

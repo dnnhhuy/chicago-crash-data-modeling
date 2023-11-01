@@ -7,5 +7,6 @@ def run():
     table_dict = processor.transform(crash_df, people_df, vehicle_df)
     processor.load_star_schema(table_dict)
     processor.stop()
-    
+if __name__ == '__main__':
+    run()
     

@@ -25,7 +25,7 @@ dag =  DAG(
     dag_id='api_crawler',
     default_args=default_args,
     max_active_runs=1,
-	schedule_interval="*/10 * * * *",
+	schedule_interval="0 0 */1 * *",
     catchup=False)
     
 op0 = PythonOperator(

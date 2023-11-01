@@ -1,5 +1,5 @@
-create database if not exists music_streaming;
-use music_streaming;
+create database if not exists chicago_crash;
+use chicago_crash;
 
 create external table if not exists dim_time (
     time_id string,
@@ -47,7 +47,7 @@ create external table if not exists control_device_cond_mini_dim (
     start_date string,
     end_date string
 )
-stored as parquet location 'hdfs://namenode:9000/spark-warehouse/dim_location';
+stored as parquet location 'hdfs://namenode:9000/spark-warehouse/control_device_cond_mini_dim';
 
 create external table if not exists dim_road_cond (
     road_cond_key string,
@@ -72,11 +72,11 @@ stored as parquet location 'hdfs://namenode:9000/spark-warehouse/bridge_vehicle_
 
 create external table if not exists dim_vehicle(
     vehicle_id string,
-    num_passengers int,
+    num_passengers string,
     make string,
     model string,
     lic_plate_state string,
-    vehicle_year int,
+    vehicle_year string,
     vehicle_defect string,
     vehicle_type string,
     vehicle_use string,
@@ -84,7 +84,7 @@ create external table if not exists dim_vehicle(
     maneuver string,
     towed_i string,
     fire_i string,
-    occupant_cnt int,
+    occupant_cnt string,
     towed_by string,
     towed_to string,
     first_contact_point string,
@@ -92,8 +92,8 @@ create external table if not exists dim_vehicle(
     carrier_name string,
     carrier_state string,
     carrier_city string,
-    total_vehicle_length double,
-    axle_cnt int,
+    total_vehicle_length string,
+    axle_cnt string,
     vehicle_config string,
     cargo_body_type string,
     load_type string
@@ -153,14 +153,13 @@ stored as parquet location 'hdfs://namenode:9000/spark-warehouse/dim_weather';
 
 create external table if not exists dim_junk(
     junk_id string,
-    intersection_related_i boolean,
-    not_right_of_way_i boolean,
-    hit_and_run_i boolean,
-    photos_taken_i boolean,
-    statements_taken_i boolean,
-    dooring_i boolean,
-    work_zone_i boolean,
-    workers_present_i boolean
+    intersection_related_i string,
+    hit_and_run_i string,
+    photos_taken_i string,
+    statements_taken_i string,
+    dooring_i string,
+    work_zone_i string,
+    workers_present_i string
 )
 stored as parquet location 'hdfs://namenode:9000/spark-warehouse/dim_junk';
 
@@ -190,13 +189,13 @@ create external table if not exists fact_crash(
     report_type_id string,
     crash_type_id string,
     damage string,
-    num_units int,
-    injuries_total int,
-    injuries_fatal int,
-    injuries_incapacitating int,
-    injuries_non_incapacitating int,
-    injuries_reported_not_evident int,
-    injuries_no_indication int,
-    injuries_unknown int
+    num_units string,
+    injuries_total string,
+    injuries_fatal string,
+    injuries_incapacitating string,
+    injuries_non_incapacitating string,
+    injuries_reported_not_evident string,
+    injuries_no_indication string,
+    injuries_unknown string
 )
 stored as parquet location 'hdfs://namenode:9000/spark-warehouse/fact_crash';

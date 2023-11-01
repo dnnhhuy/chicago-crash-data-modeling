@@ -13,7 +13,7 @@ local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 
 def get_most_recent_dag_run(dt):
-    dag_runs = DagRun.find(dag_id="batch_etl_full_load")
+    dag_runs = DagRun.find(dag_id="api_crawler")
     dag_runs.sort(key=lambda x: x.execution_date, reverse=True)
     if dag_runs:
         return dag_runs[0].execution_date
@@ -33,12 +33,12 @@ dag =  DAG(
     dag_id='etl_pipeline',
     default_args=default_args,
     max_active_runs=1,
-	schedule_interval="*/10 * * * *",
+	schedule_interval="0 0 */7 * *",
     catchup=False)
 
 wait_for_first_dag = ExternalTaskSensor(
     task_id="wait_for_first_dag",
-    external_dag_id="batch_etl_full_load",
+    external_dag_id="api_crawler",
     external_task_id="end",
     mode="reschedule",
     allowed_states=["success"],
