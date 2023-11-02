@@ -63,5 +63,5 @@ I prepared few scripts to setup and start the project automatically. In order to
 
 * Running services can be directly accessible at following these sites:
     * Spark Web UI: http://localhost:8080
-    * HDFS Web UI: http://localhost:9870 (You can observe scraped data in this directory /spark-warehouse/{table} on HDFS)
+    * HDFS Web UI: http://localhost:9870 (You can observe crawled data in this directory /data/{table} on HDFS and transformed data in: spark-warehouse/{table})
     * Superset WebUI: http://localhost:8089
