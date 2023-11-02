@@ -50,11 +50,11 @@ I prepared few scripts to setup and start the project automatically. In order to
     ```
     This function is downloading/buidling required images, then creating containers for services used in this project. </br>
     
-* In order to start processing streaming and batch events, use this script:
+* In order to start crawling and processing data, use this script:
     ```
     ./trigger-airflow.sh
     ```
-    This script start scraping data from airbnb and store data into HDFS as format of delta table.
+    This script start crawling data from socrata API, storing data into HDFS as format of delta table and transforming data to star schema stored at data warehouse.
 
 * To shut down the project, use this command:
     ```
