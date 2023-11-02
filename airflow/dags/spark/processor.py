@@ -29,43 +29,46 @@ class DataProcessor:
     def stop(self):
         self.spark.stop()
 
-    def api_to_delta(self):
-        crashes_data = get_crash_data(days_ago=7)
-        crashes_df = self.spark.createDataFrame(data=crashes_data).na.fill('empty')
-        
-        try:
+    def api_to_delta(self, days_ago=1):
+        crashes_data = get_crash_data(days_ago=days_ago)
+        crashes_df = self.spark.createDataFrame(data=crashes_data).withColumn('date', func.to_date(func.col('crash_date'))).na.fill('empty')
+        if self.path_exists('hdfs://namenode:9000/data/crashes_table'):
             old_crashes_table = DeltaTable.forPath(self.spark, path='hdfs://namenode:9000/data/crashes_table')
             old_crashes_table.alias('a') \
                 .merge(crashes_df.alias('b'), 'a.crash_record_id = b.crash_record_id') \
                 .whenMatchedUpdateAll() \
                 .whenNotMatchedInsertAll() \
                 .execute()
-        except:
-            crashes_df.withColumn('date', func.to_date(func.col('crash_date'))).write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/crashes_table').partitionBy('date').save()
+        else:
+            crashes_df.write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/crashes_table').option('mergeSchema', True).partitionBy('date').save()
             
-        people_data = get_people_data(days_ago=7)
-        people_df = self.spark.createDataFrame(data=people_data).na.fill('empty')
-        try:
+        people_data = get_people_data(days_ago=days_ago)
+        people_df = self.spark.createDataFrame(data=people_data).withColumn('date', func.to_date(func.col('crash_date'))).na.fill('empty')
+        if self.path_exists('hdfs://namenode:9000/data/people_table'):
             old_people_table = DeltaTable.forPath(self.spark, path='hdfs://namenode:9000/data/people_table')
             old_people_table.alias('a') \
-                .merge(people_df.alias('b'), 'a.person_id = b.person_id') \
+                .merge(people_df.alias('b'), 'a.person_id = b.person_id AND a.crash_record_id = b.crash_record_id') \
                 .whenMatchedUpdateAll() \
                 .whenNotMatchedInsertAll() \
                 .execute()
-        except:
-            people_df.withColumn('date', func.to_date(func.col('crash_date'))).write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/people_table').partitionBy('date').save()
+        else:
+            people_df.write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/people_table').option('mergeSchema', True).partitionBy('date').save()
             
-        vehicles_data = get_vehicle_data(days_ago=7)
-        vehicles_df = self.spark.createDataFrame(data=vehicles_data).na.fill('empty')
-        try:
+        vehicles_data = get_vehicle_data(days_ago=days_ago)
+        vehicles_df = self.spark.createDataFrame(data=vehicles_data) \
+            .withColumn('date', func.to_date(func.col('crash_date'))) \
+            .na.fill('empty') \
+            .filter(func.col('unit_type') != 'PEDESTRIAN')
+            
+        if self.path_exists('hdfs://namenode:9000/data/vehicles_table'):
             old_vehicles_table = DeltaTable.forPath(self.spark, path='hdfs://namenode:9000/data/vehicles_table')
             old_vehicles_table.alias('a') \
-                .merge(vehicles_df.alias('b'), 'a.vehicle_id = b.vehicle_id') \
+                .merge(vehicles_df.alias('b'), condition='a.vehicle_id = b.vehicle_id AND a.crash_record_id = b.crash_record_id') \
                 .whenMatchedUpdateAll() \
                 .whenNotMatchedInsertAll() \
                 .execute()
-        except:
-            vehicles_df.withColumn('date', func.to_date(func.col('crash_date'))).write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/vehicles_table').partitionBy('date').save()
+        else:
+            vehicles_df.write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/vehicles_table').option('mergeSchema', True).partitionBy('date').save()
     
     def path_exists(self, path):
         # spark is a SparkSession
