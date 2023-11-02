@@ -54,7 +54,7 @@ I prepared few scripts to setup and start the project automatically. In order to
     ```
     ./trigger-airflow.sh
     ```
-    This script start crawling data from socrata API, storing data into HDFS as format of delta table and transforming data to star schema stored at data warehouse.
+    This script start crawling data from socrata API, storing data into HDFS as format of delta table and transforming data to star schema which would be stored at data warehouse.
 
 * To shut down the project, use this command:
     ```
