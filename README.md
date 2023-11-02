@@ -26,6 +26,16 @@ The image below is visualized result star schema:
 
 This star schema use Mini Dimension to manage rapidly change dimension such as condition of traffic control divice and road condition. Bridge table was used to manage dimensions that have M:N relationship with fact table such as Vehicle Dimension or Person Dimension.
 
+This data model can be used to answering these questions:
+* How many crashes happened in different granularity hour, day, month, week, year, day of week?
+* How many fatal injuries in crashes in different granularity hour, day, month, week, year, day of week?
+* What is the distribution of driver who cause crashes based on gender?
+* What is the most primary cause of crashes?
+* How many crashes happened in different weather condition?
+* Damage distribution of crashes?
+* What is the most collision type in crashes?
+* etc.
+
 ## Example
 The example visualization from data warehouse after transform from raw data:
 
