@@ -47,6 +47,9 @@ The example visualization from data warehouse after transform from raw data:
 - Docker
 
 ### Setup
+**Notice**: This project built on arm64 architecture. If you want to run on your machine which has different architect from arm64 - amd64 for instance, you can checkout the following changes:
+- airflow/Dockerfile: change JAVA HOME directory to amd64
+
 I prepared few scripts to setup and start the project automatically. In order to setup this project, the following steps are required for the project to be successfully executed.
 
 * Firstly, you need to gain permission for shell scripts by using the following command:
