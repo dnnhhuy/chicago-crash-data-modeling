@@ -6,7 +6,7 @@ from delta.pip_utils import configure_spark_with_delta_pip
 import itertools
 from pyspark.sql import functions as func
 from pyspark.sql import Window
-from spark.crawl_data import get_crash_data, get_people_data, get_vehicle_data
+from spark.crawl_data import get_crash_data, get_people_data, get_vehicle_data, path_exists
 from datetime import date, timedelta
 class DataProcessor:
     def __init__(self) -> None:
@@ -30,62 +30,14 @@ class DataProcessor:
         self.spark.stop()
 
     def api_to_delta(self, days_ago=1):
-        crashes_data = get_crash_data(days_ago=days_ago)
-        crashes_df = self.spark.createDataFrame(data=crashes_data).withColumn('date', func.to_date(func.col('crash_date'))).na.fill('empty')
-        if self.path_exists('hdfs://namenode:9000/data/crashes_table'):
-            old_crashes_table = DeltaTable.forPath(self.spark, path='hdfs://namenode:9000/data/crashes_table')
-            old_crashes_table.alias('a') \
-                .merge(crashes_df.alias('b'), 'a.crash_record_id = b.crash_record_id') \
-                .whenMatchedUpdateAll() \
-                .whenNotMatchedInsertAll() \
-                .execute()
-        else:
-            crashes_df.write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/crashes_table').option('mergeSchema', True).partitionBy('date').save()
-            
-        people_data = get_people_data(days_ago=days_ago)
-        people_df = self.spark.createDataFrame(data=people_data).withColumn('date', func.to_date(func.col('crash_date'))).na.fill('empty')
-        if self.path_exists('hdfs://namenode:9000/data/people_table'):
-            old_people_table = DeltaTable.forPath(self.spark, path='hdfs://namenode:9000/data/people_table')
-            old_people_table.alias('a') \
-                .merge(people_df.alias('b'), 'a.person_id = b.person_id AND a.crash_record_id = b.crash_record_id') \
-                .whenMatchedUpdateAll() \
-                .whenNotMatchedInsertAll() \
-                .execute()
-        else:
-            people_df.write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/people_table').option('mergeSchema', True).partitionBy('date').save()
-            
-        vehicles_data = get_vehicle_data(days_ago=days_ago)
-        vehicles_df = self.spark.createDataFrame(data=vehicles_data) \
-            .withColumn('date', func.to_date(func.col('crash_date'))) \
-            .na.fill('empty') \
-            .filter(func.col('unit_type') != 'PEDESTRIAN')
-            
-        if self.path_exists('hdfs://namenode:9000/data/vehicles_table'):
-            old_vehicles_table = DeltaTable.forPath(self.spark, path='hdfs://namenode:9000/data/vehicles_table')
-            old_vehicles_table.alias('a') \
-                .merge(vehicles_df.alias('b'), condition='a.vehicle_id = b.vehicle_id AND a.crash_record_id = b.crash_record_id') \
-                .whenMatchedUpdateAll() \
-                .whenNotMatchedInsertAll() \
-                .execute()
-        else:
-            vehicles_df.write.mode('overwrite').format('delta').option('path', 'hdfs://namenode:9000/data/vehicles_table').option('mergeSchema', True).partitionBy('date').save()
-    
-    def path_exists(self, path):
-        # spark is a SparkSession
-        sc = self.spark.sparkContext
-        fs = sc._jvm.org.apache.hadoop.fs.FileSystem.get(
-                sc._jvm.java.net.URI.create(path),
-                sc._jsc.hadoopConfiguration(),
-        )
-        return fs.exists(sc._jvm.org.apache.hadoop.fs.Path(path))
+        get_crash_data(spark=self.spark, days_ago=days_ago)
+        get_people_data(spark=self.spark, days_ago=days_ago)
+        get_vehicle_data(spark=self.spark, days_ago=days_ago)
     
     def extract_crash_table(self, days_ago=0):
-        paths = []
-        for day in range(days_ago + 1):
-            path = f'hdfs://namenode:9000/data/crashes_table/date={(date.today() - timedelta(days=day))}'
-            if self.path_exists(path):
-                paths.append(path)
-        crash_df = self.spark.read.parquet(*paths) \
+        crash_table = DeltaTable.forPath(self.spark, 'hdfs://namenode:9000/chicago-crash/raw/crashes')
+        crash_df = crash_table.toDF() \
+            .filter((func.to_date(func.col('crash_date')) <= date.today()) & (func.to_date(func.col('crash_date')) >= date.today() - timedelta(days=days_ago))) \
             .withColumn('hour', func.hour(func.col('crash_date'))) \
             .withColumn('minute', func.minute(func.col('crash_date'))) \
             .withColumn('second', func.second(func.col('crash_date'))) \
@@ -99,95 +51,178 @@ class DataProcessor:
         return crash_df
 
     def extract_people_table(self, days_ago=0):
-        paths = []
-        for day in range(days_ago + 1):
-            path = f'hdfs://namenode:9000/data/people_table/date={(date.today() - timedelta(days=day))}'
-            if self.path_exists(path):
-                paths.append(path)
-        people_df = self.spark.read.parquet(*paths)
+        people_table = DeltaTable.forPath(self.spark, 'hdfs://namenode:9000/chicago-crash/raw/people')
+        people_df = people_table.toDF() \
+            .filter((func.to_date(func.col('crash_date')) <= date.today()) & (func.to_date(func.col('crash_date')) >= date.today() - timedelta(days=days_ago)))
         return people_df
-    
+
     def extract_vehicle_table(self, days_ago=0):
-        paths = []
-        for day in range(days_ago + 1):
-            path = f'hdfs://namenode:9000/data/vehicles_table/date={(date.today() - timedelta(days=day))}'
-            if self.path_exists(path):
-                paths.append(path)
-        vehicle_df = self.spark.read.parquet(*paths)
-        return vehicle_df
+        vehicles_table = DeltaTable.forPath(self.spark, 'hdfs://namenode:9000/chicago-crash/raw/vehicles')
+        vehicles_df = vehicles_table.toDF() \
+            .filter((func.to_date(func.col('crash_date')) <= date.today()) & (func.to_date(func.col('crash_date')) >= date.today() - timedelta(days=days_ago))) \
+            .filter(func.col('vehicle_id') != 'N/A')
+        return vehicles_df
 
     def transform(self, crash_df, people_df, vehicle_df):
 
         dim_vehicle = vehicle_df.select('vehicle_id', 'num_passengers', 'make', 'model', 'lic_plate_state', 'vehicle_year', 'vehicle_defect', 'vehicle_type', 'vehicle_use', 'travel_direction', 'maneuver', 'towed_i', 'fire_i', 'occupant_cnt', 'towed_by', 'towed_to', 'first_contact_point', 'commercial_src', 'carrier_name', 'carrier_state', 'carrier_city', 'total_vehicle_length', 'axle_cnt', 'vehicle_config', 'cargo_body_type', 'load_type')
-        
+    
         dim_person = people_df.select('person_id', 'person_type', 'seat_no', 'city', 'state', 'zipcode', 'sex', 'age', 'drivers_license_state', 'drivers_license_class', 'safety_equipment', 'airbag_deployed', 'ejection', 'injury_classification', 'hospital', 'driver_action', 'driver_vision', 'physical_condition', 'pedpedal_action', 'pedpedal_visibility', 'pedpedal_location', 'bac_result')
 
         dim_location = crash_df.select('street_no', 'street_direction', 'street_name', 'alignment', 'posted_speed_limit', 'trafficway_type', 'longitude', 'latitude') \
-            .dropDuplicates() \
-            .withColumn('location_id', func.expr('uuid()')) \
+            .dropDuplicates()
+            
+        dim_location = dim_location.withColumn('location_id', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_location.columns
+                )),
+                512
+            )) \
             .select('location_id', 'street_no', 'street_direction', 'street_name', 'alignment', 'posted_speed_limit', 'trafficway_type', 'longitude', 'latitude')
 
-        time = [[x for x in range(24)], [x for x in range(60)], [x for x in range(60)]]
+        time = [["{:02d}".format(x) for x in range(24)], ["{:02d}".format(x) for x in range(60)], ["{:02d}".format(x) for x in range(60)]]
         combination = itertools.product(*time)
 
-        dim_time = self.spark.createDataFrame(combination, ['hour', 'minute', 'second']) \
-            .withColumn('time_id', func.expr('uuid()')) \
+        dim_time = self.spark.createDataFrame(combination, ['hour', 'minute', 'second'])
+        dim_time = dim_time \
+            .withColumn('time_id', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_time.columns
+                )),
+                512
+            )) \
             .select('time_id', 'hour', 'minute', 'second')
 
-        dim_date = crash_df.select('day', 'dayofweek', 'month', 'week', 'year', 'quarter') \
+        dim_date = crash_df.select('day', 'dayofweek', 'month', 'week', 'year', 'quarter')
+        dim_date = dim_date \
             .dropDuplicates() \
-            .withColumn('date_id', func.expr('uuid()')) \
+            .withColumn('date_id', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_date.columns
+                )),
+                512
+            )) \
             .select('date_id', 'day', 'dayofweek', 'month', 'week', 'year', 'quarter')
 
 
         dim_weather = crash_df.select('weather_condition', 'lighting_condition') \
             .na.fill('empty') \
-            .dropDuplicates() \
-            .withColumn('weather_id', func.expr('uuid()')) \
+            .dropDuplicates()
+        dim_weather = dim_weather \
+            .withColumn('weather_id', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_weather.columns
+                )),
+                512
+            )) \
             .select('weather_id', 'weather_condition', 'lighting_condition')
             
 
         dim_junk = crash_df.select('intersection_related_i', 'hit_and_run_i', 'photos_taken_i', 'statements_taken_i', 'dooring_i', 'work_zone_i', 'workers_present_i') \
             .na.fill('empty') \
-            .dropDuplicates() \
-            .withColumn('junk_id', func.expr('uuid()'))
+            .dropDuplicates()
+        dim_junk = dim_junk \
+            .withColumn('junk_id', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_junk.columns
+                )),
+                512
+            ))
             
         dim_cause = crash_df.select('prim_contributory_cause', 'sec_contributory_cause') \
             .na.fill('empty') \
-            .dropDuplicates() \
-            .withColumn('cause_id', func.expr('uuid()')) \
+            .dropDuplicates()
+        dim_cause = dim_cause \
+            .withColumn('cause_id', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_cause.columns
+                )),
+                512
+            )) \
             .select('cause_id', 'prim_contributory_cause', 'sec_contributory_cause')
 
 
         dim_crash_type = crash_df.select('crash_type') \
             .na.fill('empty') \
-            .dropDuplicates() \
-            .withColumn('crash_type_id', func.expr('uuid()')) \
+            .dropDuplicates()
+        dim_crash_type = dim_crash_type \
+            .withColumn('crash_type_id', func.sha2(
+                func.concat(*(
+                    func.col(col).cast("string")
+                    for col 
+                    in dim_crash_type.columns
+                )),
+                512
+            )) \
             .select('crash_type_id', 'crash_type')
 
         dim_report_type = crash_df.select('report_type') \
             .na.fill('empty') \
-            .dropDuplicates() \
-            .withColumn('report_type_id', func.expr('uuid()')) \
+            .dropDuplicates()
+        dim_report_type = dim_report_type \
+            .withColumn('report_type_id', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_report_type.columns
+                )),
+                512
+            )) \
             .select('report_type_id', 'report_type')
 
         dim_collision = crash_df.select('first_crash_type') \
             .na.fill('empty') \
             .dropDuplicates() \
-            .withColumnRenamed('first_crash_type', 'collision_type') \
-            .withColumn('collision_type_id', func.expr('uuid()')) \
+            .withColumnRenamed('first_crash_type', 'collision_type')
+        dim_collision = dim_collision \
+            .withColumn('collision_type_id', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_collision.columns
+                )),
+                512
+            )) \
             .select('collision_type_id', 'collision_type')
 
         dim_road_cond = crash_df.select('roadway_surface_cond', 'road_defect') \
             .na.fill('empty')\
-            .dropDuplicates() \
-            .withColumn ('road_cond_key', func.expr('uuid()')) \
+            .dropDuplicates()
+        dim_road_cond = dim_road_cond \
+            .withColumn ('road_cond_key', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_road_cond.columns
+                )),
+                512
+            )) \
             .select('road_cond_key', 'roadway_surface_cond', 'road_defect')
 
         dim_control_device_cond = crash_df.select('traffic_control_device', 'device_condition') \
             .na.fill('empty') \
-            .dropDuplicates() \
-            .withColumn('device_cond_key', func.expr('uuid()')) \
+            .dropDuplicates()
+        dim_control_device_cond = dim_control_device_cond \
+            .withColumn('device_cond_key', func.sha2(
+            func.concat(*(
+                func.col(col).cast("string")
+                for col 
+                in dim_control_device_cond.columns
+                )),
+                512
+            )) \
             .select('device_cond_key', 'traffic_control_device', 'device_condition')
 
 
@@ -267,7 +302,6 @@ class DataProcessor:
                             .withColumn('person_group_key', func.col('crash_record_id')) \
                             .withColumn('vehicle_group_key', func.col('crash_record_id')) \
                             .select('location_id', 'time_id', 'date_id', 'person_group_key', 'vehicle_group_key', 'weather_id', 'junk_id', 'cause_id', 'collision_type_id', 'report_type_id', 'crash_type_id', 'damage', 'num_units', 'injuries_total', 'injuries_fatal', 'injuries_incapacitating', 'injuries_non_incapacitating', 'injuries_reported_not_evident', 'injuries_no_indication', 'injuries_unknown')
-        fact_crash.show()
         return {'dim_location': dim_location,
                 'road_cond_mini_dim': road_cond_mini_dim,
                 'control_device_cond_mini_dim': control_device_cond_mini_dim,
@@ -290,6 +324,151 @@ class DataProcessor:
 
     # Merge to old table
     def load_star_schema(self, table_dict):
+        spark = self.spark
         for table_name, table in table_dict.items():
-            table.write.mode('overwrite').format('parquet').option('path', f'hdfs://namenode:9000/spark-warehouse/{table_name}').save()
-        
+            if not path_exists(f'hdfs://namenode:9000/chicago-crash/serving/{table_name}'):
+                table.write.mode('overwrite').format('delta').option('path', f'hdfs://namenode:9000/chicago-crash/serving/{table_name}').option('mergeSchema', True).save()
+            else:
+                old_table = DeltaTable.forPath(spark, path=f'hdfs://namenode:9000/chicago-crash/serving/{table_name}')
+                if table_name == 'dim_location':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.location_id = b.location_id') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'dim_road_cond':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.road_cond_key = b.road_cond_key') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'dim_control_device_cond':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.device_cond_key = b.device_cond_key') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'road_cond_mini_dim':
+                    old_table_df = old_table.toDF()
+                    old_table_df.createOrReplaceTempView('OldTableTempView')
+                    # Get max start date from old table
+                    max_StartDate = spark.sql('SELECT location_id, max(start_date) as max_start_date FROM OldTableTempView GROUP BY location_id')
+
+                    # Filter only new records having start_date > max start date from old table
+                    new_record = table.join(max_StartDate, (table['location_id'] == max_StartDate['location_id']), 'left_outer') \
+                        .filter((func.col('start_date') > func.col('max_start_date')) | (func.isnull(func.col('max_start_date')))) \
+                        .select(table['location_id'], 'road_cond_key', 'start_date', 'end_date')
+                    
+                    new_record.createOrReplaceTempView('NewTableTempView')
+                    
+                    # Get min start date from new records
+                    min_StartDate_newRecord = spark.sql('SELECT location_id, min(start_date) as min_start_date FROM NewTableTempView GROUP BY location_id')
+
+                    # Filter neededly updated rows from old table using min start date from above
+                    update_rows = old_table_df.join(min_StartDate_newRecord, (old_table_df['location_id'] == min_StartDate_newRecord['location_id']), 'inner') \
+                        .filter(func.col('end_date') == '') \
+                        .select(old_table_df['location_id'], 'road_cond_key', 'start_date', 'min_start_date') \
+                        .withColumnRenamed('min_start_date', 'end_date')
+                    
+                    insert_rows = update_rows.union(new_record)
+                    
+                    old_table.alias('a') \
+                        .merge(insert_rows.alias('b'), condition='a.location_id = b.location_id AND a.road_cond_key = b.road_cond_key AND a.start_date = b.start_date') \
+                        .whenMatchedUpdate(set={'end_date': 'b.end_date'}) \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                        
+                elif table_name == 'control_device_cond_mini_dim':
+                    old_table_df = old_table.toDF()
+                    old_table_df.createOrReplaceTempView('OldTableTempView')
+                    # Get max start date from old table
+                    max_StartDate = spark.sql('SELECT location_id, max(start_date) as max_start_date FROM OldTableTempView GROUP BY location_id')
+
+                    # Filter only new records
+                    new_record = table.join(max_StartDate, (table['location_id'] == max_StartDate['location_id']), 'left_outer') \
+                        .filter((func.col('start_date') > func.col('max_start_date')) | (func.isnull(func.col('max_start_date')))) \
+                        .select(table['location_id'], 'device_cond_key', 'start_date', 'end_date')
+                    
+                    new_record.createOrReplaceTempView('NewTableTempView')
+                    
+                    # Get min start date from new records
+                    min_StartDate_newRecord = spark.sql('SELECT location_id, min(start_date) as min_start_date FROM NewTableTempView GROUP BY location_id')
+
+                    # Filter neededly updated rows from old table using min start date from above
+                    update_rows = old_table_df.join(min_StartDate_newRecord, (old_table_df['location_id'] == min_StartDate_newRecord['location_id']), 'inner') \
+                        .filter(func.col('end_date') == '') \
+                        .select(old_table_df['location_id'], 'device_cond_key', 'start_date', 'min_start_date') \
+                        .withColumnRenamed('min_start_date', 'end_date')
+                    
+                    insert_rows = update_rows.union(new_record)
+                    
+                    old_table.alias('a') \
+                        .merge(insert_rows.alias('b'), condition='a.location_id = b.location_id AND a.device_cond_key = b.device_cond_key AND a.start_date = b.start_date') \
+                        .whenMatchedUpdate(set={'end_date': 'b.end_date'}) \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                        
+                elif table_name == 'dim_time':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.time_id = b.time_id') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'dim_date':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.date_id = b.date_id') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'bridge_vehicle_group':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.vehicle_group_key = b.vehicle_group_key AND a.vehicle_id = b.vehicle_id') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'dim_vehicle':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.vehicle_id = b.vehicle_id') \
+                        .whenMatchedUpdateAll() \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'dim_collision':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.collision_type_id = b.collision_type_id') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'dim_report_type':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.report_type_id = b.report_type_id') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'bridge_person_group':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.person_group_key = b.person_group_key and a.person_id = b.person_id') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'dim_person':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.person_id = b.person_id') \
+                        .whenMatchedUpdateAll() \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
+                elif table_name == 'dim_weather':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.weather_id = b.weather_id') \
+                        .whenNotMatchedInsertAll()\
+                        .execute()
+                elif table_name == 'dim_junk':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.junk_id = b.junk_id') \
+                        .whenNotMatchedInsertAll()\
+                        .execute()
+                elif table_name == 'dim_cause':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.cause_id = b.cause_id') \
+                        .whenNotMatchedInsertAll()\
+                        .execute()
+                elif table_name == 'dim_crash_type':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.crash_type_id = b.crash_type_id')\
+                        .whenNotMatchedInsertAll()\
+                        .execute()
+                elif table_name == 'fact_crash':
+                    old_table.alias('a') \
+                        .merge(table.alias('b'), condition='a.location_id = b.location_id AND a.time_id = b.time_id AND a.date_id = b.date_id AND a.person_group_key = b.person_group_key AND a.vehicle_group_key = b.vehicle_group_key AND a.weather_id = b.weather_id AND a.junk_id = b.junk_id AND a.cause_id = b.cause_id AND a.collision_type_id = b.collision_type_id AND a.report_type_id = b.report_type_id AND a.crash_type_id = b.crash_type_id') \
+                        .whenNotMatchedInsertAll() \
+                        .execute()
